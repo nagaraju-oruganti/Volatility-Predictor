@@ -23,21 +23,10 @@ class GarchModel:
     
     
     def __init__(self, log_returns, config):
-        self.log_returns = log_returns
+        self.log_returns = 100 * log_returns
         self.config = config
-        
-    def subsequences(self):
-        window = self.config.experiment_config['window']
-        step_size = self.config.step_size
-        list_of_sequences = []
-        for i in range(len(self.log_returns), -1, -step_size):
-            sub_seq = self.log_returns[i-window : i].values.tolist()
-            if len(sub_seq) == window: 
-                sub_seq = [i] + [100 * s for s in sub_seq]                     # first element is the index of the dataseries
-                list_of_sequences.append(sub_seq)
-        return list_of_sequences
-        
-    def estimate_parameters(self, garch_config):
+    
+    def estimate_volatility(self, garch_config):
         
         # garch configuration
         vol = garch_config['vol']
@@ -45,36 +34,21 @@ class GarchModel:
         q   = garch_config['q']
         o   = garch_config['o']
         
-        # list of sequences
-        list_of_sequences = self.subsequences()
+        # create model
+        model       = arch_model(self.log_returns, vol = vol, p = p, q = q, o = o, dist='normal')
+        results     = model.fit(update_freq=-1, disp = False, show_warning=False)
+        volatility  = results.conditional_volatility
         
-        list_of_params = []
-        for seq in list_of_sequences:
-            model = arch_model(seq[1:], vol = vol, p = p, q = q, o = o, dist='normal')   # note that the first item is reserved for index
-            results = model.fit(update_freq=-1,  disp = False, show_warning = False)
-            
-            # parameters
-            omega   = results.params.get('omega'   , self.config.default_value)
-            alpha_1 = results.params.get('alpha[1]', self.config.default_value)
-            beta_1  = results.params.get('beta[1]' , self.config.default_value)
-            gamma_1 = results.params.get('gamma[1]', self.config.default_value)
-            
-            # construct output
-            out = [seq[0], omega, alpha_1, beta_1, gamma_1]
-            
-            # append to the sequence
-            list_of_params.append(out)
-
-        return list_of_params
+        return volatility
     
     def garch_params(self):
-        return self.estimate_parameters(garch_config=self.config.garch)
+        return self.estimate_volatility(garch_config=self.config.garch)
     
     def egarch_params(self):
-        return self.estimate_parameters(garch_config=self.config.egarch)
+        return self.estimate_volatility(garch_config=self.config.egarch)
     
     def gjr_garch_params(self):
-        return self.estimate_parameters(garch_config=self.config.gjr_garch)
+        return self.estimate_volatility(garch_config=self.config.gjr_garch)
     
     
 ### Treditional LSTM MODEL
@@ -186,9 +160,11 @@ class MultiLayerPeepholeLSTM(nn.Module):
         
     def forward(self, x, y):
         
+        x = x.permute(0, 2, 1)
+        
         # Initialize hidden and cell states
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(self.device)
-        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(self.device)
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(self.config.device)
+        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(self.config.device)
         
         # Forward pass through Peephole LSTM layers
         for layer in self.layers:
@@ -205,6 +181,8 @@ class MultiLayerPeepholeLSTM(nn.Module):
 ### Gated Recurrent Unit (GRU)
 class MultiLayerGRU(nn.Module):
     def __init__(self, config):
+        super(MultiLayerGRU, self).__init__()
+        
         self.config = config
         
         self.input_size  = self.config.input_size
@@ -214,9 +192,7 @@ class MultiLayerGRU(nn.Module):
         
         ## Note: Unlike LSTM, GRU do not have argument to process multiple layers
         # First GRU layer
-        self.gru1 = nn.GRU(input_size=self.input_size,
-                           hidden_size=self.hidden_size, 
-                           batch_first= True)
+        self.gru1 = nn.GRU(input_size=self.input_size, hidden_size=self.hidden_size, batch_first= True)
         
         # Additional GRU layers
         self.gru_layers = nn.ModuleList([nn.GRU(input_size=self.hidden_size, hidden_size=self.hidden_size, batch_first=True) \
@@ -231,6 +207,8 @@ class MultiLayerGRU(nn.Module):
         
     def forward(self, x, y = None):
         
+        x = x.permute(0, 2, 1)
+        
         # forward pass through first GRU layer
         out, hidden = self.gru1(x)
         
@@ -240,10 +218,10 @@ class MultiLayerGRU(nn.Module):
         
         # output
         out = self.fc(out[: , -1, :])        # output from the last time step
-        
+
         if y is None:
             return out
-        
+        loss = self.loss_fn(out, y)
         return out, loss
         
 if __name__ == '__main__':
@@ -251,7 +229,7 @@ if __name__ == '__main__':
     from helper_config import Config
     config = Config()
     
-    df = pd.read_csv('inputs/data/ATX Historical Data.csv')
+    df = pd.read_csv('inputs/data/ATX.csv')
     df.rename(columns = {'Close' : 'Price'}, inplace = True)
     df.dropna(subset = ['Price'], how = 'any', axis = 0, inplace = True)
     df['Date'] = pd.to_datetime(df['Date'])
@@ -264,4 +242,4 @@ if __name__ == '__main__':
     # garch models
     garch_model = GarchModel(log_returns, config = config)
     params = garch_model.garch_params()
-    print(len(params))
+    print(params[:10])

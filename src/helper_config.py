@@ -25,7 +25,7 @@ class Config:
     ### Train and test splits
     splits = {
         'train': ('01-01-2013', '12-31-2020'),
-        'test' : ('01-01-2021', '12-31-2022')
+        'valid' : ('01-01-2021', '12-31-2022')
     }
     
     folds = {
@@ -72,7 +72,7 @@ class Config:
     iters_to_accumlate = 1
     learning_rate = 5e-5
     num_epochs = 200
-    save_epoch_wait = 1
+    save_epoch_wait = 0
     early_stop_count = 20
     save_checkpoint = False
     
@@ -82,3 +82,5 @@ class Config:
     num_layers = 3
     output_size = 1
     
+    def apply_seed(self, seed):
+        seed_everything(seed)

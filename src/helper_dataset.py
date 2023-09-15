@@ -58,7 +58,7 @@ class Preprocess:
         variance = np.array([(r - avg)**2 for r in log_returns])
         
         # realized volatility
-        rv = np.sqrt(variance)
+        rv = np.sqrt(np.mean(variance))
 
         return rv
     
@@ -86,10 +86,13 @@ class Preprocess:
     
     def combine(self):
         
+        def __make_dataset(series, name):
+            d = pd.DataFrame(series).reset_index()
+            d.columns = ['index', name]
+            return d
+            
         # log returns of a stock / index
-        log_returns = self.log_returns
-        log_rtn_df = pd.DataFrame(log_returns).reset_index()
-        log_rtn_df.columns = ['index', 'log_returns']
+        log_rtn_df = __make_dataset(self.log_returns, name = 'log_returns')
         
         # realized volatlity        (target)
         rv_list = self.estimate_realized_volatility()
@@ -97,9 +100,9 @@ class Preprocess:
         
         # garch, egarch, and gjr_garch_params
         garch_params, egarch_params, gjr_garch_params = self.estimate_garch_parameters()
-        garch_df        = pd.DataFrame(garch_params , columns = ['index', 'garch_omega', 'garch_alpha', 'garch_beta', 'garch_gamma'])
-        egarch_df       = pd.DataFrame(egarch_params, columns = ['index', 'egarch_omega', 'egarch_alpha', 'egarch_beta', 'egarch_gamma'])
-        gjr_garch_df    = pd.DataFrame(gjr_garch_params, columns = ['index', 'gjr_garch_omega', 'gjr_garch_alpha', 'gjr_garch_beta', 'gjr_garch_gamma'])
+        garch_df        = __make_dataset(garch_params, name = 'garch_volatility')
+        egarch_df       = __make_dataset(egarch_params, name = 'egarch_volatility')
+        gjr_garch_df    = __make_dataset(gjr_garch_params, name = 'gjr_garch_volatility')
         
         # merge
         final_df = log_rtn_df.merge(rv_df, on = 'index', how = 'inner')
@@ -149,7 +152,6 @@ class Preprocess:
 class MyDataset(Dataset):
     def __init__(self, df, com_df, config):
         self.df = df
-        print(df.shape)
         self.com_df = com_df        # commodity_prices
         self.config = config
         self.exp_config = self.config.experiment_config
@@ -179,14 +181,9 @@ class MyDataset(Dataset):
             features += ['log_returns_oil', 'log_returns_gold']
             
         # Append garch model features
-        if 'garch' in garch_models:
-            features += ['garch_omega', 'garch_alpha', 'garch_beta']
-            
-        if 'egarch' in garch_models:
-            features += ['egarch_omega', 'egarch_alpha', 'egarch_beta', 'egarch_gamma']
-            
-        if 'gjr_garch' in garch_models:
-            features += ['gjr_garch_omega', 'gjr_garch_alpha', 'gjr_garch_beta', 'gjr_garch_gamma']
+        if 'garch' in garch_models: features.append('garch_volatility')
+        if 'egarch' in garch_models: features.append('egarch_volatility')
+        if 'gjr_garch' in garch_models: features.append('gjr_garch_volatility')
             
         ## sort by date
         self.df.sort_values(by = 'Date', ascending = False)
@@ -224,12 +221,12 @@ def get_dataloaders(config, fold = 1):
     use_commodity_prices = config.experiment_config['use_commodity_prices']
     
     # folds
-    folds = config.folds[fold]
+    folds = config.splits if fold == -1 else config.folds[fold]         # if fold is -1 then we are training on the entire dataset minus test samples
     (train_start, train_end) = folds['train']
     (valid_start, valid_end) = folds['valid']
     
     # read index data
-    df = pd.read_csv(os.path.join(config.data_dir, 'prep_data', f'window_{window}', mkt_index, 'norm_data.csv'))
+    df = pd.read_csv(os.path.join(config.data_dir, 'prep_data', f'window_{window}', mkt_index, 'final_data.csv'))
     df['Date'] = pd.to_datetime(df['Date'])
     df.sort_values(by = 'Date', ascending = False, inplace = True)
     
@@ -240,8 +237,8 @@ def get_dataloaders(config, fold = 1):
     com_train, com_valid = pd.DataFrame(), pd.DataFrame()
     if use_commodity_prices:
         # read crude oil and gold data
-        oil = pd.read_csv(os.path.join(config.data_dir, 'prep_data', f'window_{window}', 'Crude_Oil_WTI Futures', 'norm_data.csv'))
-        gold = pd.read_csv(os.path.join(config.data_dir, 'prep_data', f'window_{window}', 'Gold_Futures', 'norm_data.csv'))
+        oil = pd.read_csv(os.path.join(config.data_dir, 'prep_data', f'window_{window}', 'Crude_Oil_WTI Futures', 'final_data.csv'))
+        gold = pd.read_csv(os.path.join(config.data_dir, 'prep_data', f'window_{window}', 'Gold_Futures', 'final_data.csv'))
         
         oil = oil[['Date', 'log_returns']]
         gold = gold[['Date', 'log_returns']]
@@ -265,7 +262,8 @@ def get_dataloaders(config, fold = 1):
                               shuffle       = False,
                               drop_last     = False)
     
-    print(len(train_loader.dataset), len(valid_loader.dataset))
+    print(f'train samples: {len(train_loader.dataset)}')
+    print(f'valid samples: {len(valid_loader.dataset)}')
         
     return train, train_loader, valid_loader, None
         
@@ -275,12 +273,12 @@ if __name__ == '__main__':
     config = Config()
     config.data_dir = 'inputs'
     
-    file = 'ATX.csv'
-    df = pd.read_csv(f'inputs/data/{file}')
-    p = Preprocess(df, config, asset_index_name=file.replace('.csv', ''))
-    p.estimate_log_returns()
-    final_df = p.combine()
-    print(final_df.head())
+    for file in os.listdir('inputs/data'):
+        df = pd.read_csv(f'inputs/data/{file}')
+        p = Preprocess(df, config, asset_index_name=file.replace('.csv', ''))
+        p.estimate_log_returns()
+        final_df = p.combine()
+        #print(final_df.head())
     
     # config.experiment_config = dict(
     #     index                   = 'ATX',

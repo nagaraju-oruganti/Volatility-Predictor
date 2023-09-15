@@ -18,6 +18,7 @@ from sklearn.metrics import mean_squared_error
 ## Local imports
 from helper_models import LSTMModel, MultiLayerGRU, MultiLayerPeepholeLSTM
 from helper_dataset import get_dataloaders
+from helper_utils import project_metrics
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -179,8 +180,7 @@ def save_config(config, path):
 def train(config):
     print();print('-'*50);print(); print(f'Training fold {config.fold}')
     
-    device = config.device
-    
+    device = config.device    
     config.dest_path = os.path.join(config.models_dir, config.model_name)
     os.makedirs(config.dest_path, exist_ok=True)
     
@@ -208,14 +208,22 @@ def train(config):
     with open(os.path.join(config.dest_path, f'results{config.fold}.pkl'), 'wb') as f:
         pickle.dump(results, f)
     
-    if test_loader is not None:
-        ### Load best score model and make predictions
-        model.to('cpu')
-        model.load_state_dict(torch.load(f'{config.dest_path}/model{config.fold}.pth', map_location=torch.device('cpu'))['model_state_dict'])
-        model.to(config.device)
+    ### Load best score model. Make predictions and estimate project metrics
+    model.to('cpu')
+    model.load_state_dict(torch.load(f'{config.dest_path}/model{config.fold}.pth', map_location=torch.device('cpu'))['model_state_dict'])
+    model.to(config.device)
+    
+    # validation dataset
+    valid_score, valid_loss, eval_results  = evaluate(model, valid_loader, device)
+    with open(os.path.join(config.dest_path, f'valid_predictions{config.fold}.pkl'), 'wb') as f:
+        pickle.dump(eval_results, f)
         
+    with open(os.path.join(config.dest_path, f'project_metrics{config.fold}.pkl'), 'wb') as f:
+        pickle.dump(project_metrics, f)
+    
+    # Do the same on the test dataset (if avaliable)
+    if test_loader is not None:
         train_score, train_loss, _  = evaluate(model, train_loader, device)
-        valid_score, valid_loss, _  = evaluate(model, valid_loader, device)
         _, _, test_results          = evaluate(model, test_loader, device)
         print(f'Train        - score: {train_score:.6f}, loss: {train_loss:.6f}')
         print(f'Validation   - score: {valid_score:.6f}, loss: {valid_loss:.6f}')
@@ -231,17 +239,17 @@ if __name__ == '__main__':
     from helper_config import Config
     
     config = Config()
-    config.fold = 1
+    config.fold = -1
     config.data_dir = 'inputs'
     config.models_dir = 'models' 
     config.model_name = 'baseline_lstm'
-    config.learning_rate = 1e-4
-    config.train_batch_size = 16
+    config.learning_rate = 1e-5
+    config.train_batch_size = 8
     config.num_epochs = 200
-    config.save_epoch_wait = 1    
-    config.early_stop_count = 20
+    config.early_stop_count = 10
     config.save_checkpoint = True
-    config.experiment_config['model_type'] = ['LSTM', 'garch', 'egarch', 'gjr_garch']
+    config.experiment_config['model_type'] = ['Peephole_LSTM', 'garch', 'egarch', 'gjr_garch']
     config.experiment_config['use_commodity_prices'] = True
+    config.apply_seed(seed = 3407)
     
     results = train(config)

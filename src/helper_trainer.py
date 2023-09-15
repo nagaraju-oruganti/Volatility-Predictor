@@ -45,11 +45,11 @@ def evaluate(model, dataloader, device):
     y_preds = np.array(y_preds)
     
     loss = np.mean(batch_loss_list)
-    rmse = mean_squared_error(y_trues, y_preds)
+    mse = mean_squared_error(y_trues, y_preds)
     
     eval_results = [dates, y_trues, y_preds]
     
-    return rmse, loss, eval_results
+    return mse, loss, eval_results
 
 #### Trainer
 def trainer(config, train, model, train_loader, valid_loader, optimizer, scheduler):
@@ -86,20 +86,20 @@ def trainer(config, train, model, train_loader, valid_loader, optimizer, schedul
             print('')
             text =  f'>>> [{datetime.now()} | {epoch + 1}/{NUM_EPOCHS} | Early stopping counter {counter}] \n'
             text += f'    loss          - train: {dis(train_loss)}      valid: {dis(valid_loss)} \n'
-            text += f'    rmse          - train: {dis(train_rmse)}      valid: {dis(valid_rmse)} \n'
+            text += f'    mse           - train: {dis(train_mse)}      valid: {dis(valid_mse)} \n'
             text += f'    learning rate        : {optimizer.param_groups[0]["lr"]:.5e}'
             print(text + '\n')
         
         # Evaluation
-        train_rmse, train_loss, _ = evaluate(model, train_loader, device) 
-        valid_rmse, valid_loss, eval_results = evaluate(model, valid_loader, device)
+        train_mse, train_loss, _ = evaluate(model, train_loader, device) 
+        valid_mse, valid_loss, eval_results = evaluate(model, valid_loader, device)
         
         # append results
         lr =  optimizer.param_groups[0]["lr"]
-        results.append((epoch, train_loss, valid_loss, train_rmse, valid_rmse, lr, bidx))
+        results.append((epoch, train_loss, valid_loss, train_mse, valid_mse, lr, bidx))
         
         # Learning rate scheduler
-        eval_metric = valid_rmse
+        eval_metric = valid_mse
         scheduler.step(eval_metric)           # apply scheduler on validation accuracy
         
         ### Save checkpoint
@@ -184,6 +184,7 @@ def train(config):
     config.dest_path = os.path.join(config.models_dir, config.model_name)
     os.makedirs(config.dest_path, exist_ok=True)
     
+    config.input_size = config.experiment_config['window']
     # define model
     if config.experiment_config['model_type'][0] == 'LSTM':
         model = LSTMModel(config = config)
@@ -219,7 +220,8 @@ def train(config):
         pickle.dump(eval_results, f)
         
     with open(os.path.join(config.dest_path, f'project_metrics{config.fold}.pkl'), 'wb') as f:
-        pickle.dump(project_metrics, f)
+        metrics = project_metrics(y_true = eval_results[1], y_pred = eval_results[2])
+        pickle.dump(metrics, f)
     
     # Do the same on the test dataset (if avaliable)
     if test_loader is not None:
@@ -233,7 +235,6 @@ def train(config):
             print('saved test results')
         
     return results
-
 
 if __name__ == '__main__':
     from helper_config import Config

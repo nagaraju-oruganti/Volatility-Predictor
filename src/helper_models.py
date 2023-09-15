@@ -115,6 +115,7 @@ class PeepholeLSTM(nn.Module):
         self.U_c = nn.Linear(hidden_size, hidden_size, bias=False)
         
     def forward(self, x, prev_hidden_state, prev_cell_state):
+        
         # Input gate
         i_t = torch.sigmoid(self.W_i(x) + self.U_i(prev_hidden_state) + prev_cell_state)
         
@@ -133,7 +134,6 @@ class PeepholeLSTM(nn.Module):
         
         return h_t, c_t
     
-
 class MultiLayerPeepholeLSTM(nn.Module):
     def __init__(self, config):
         super(MultiLayerPeepholeLSTM, self).__init__()
@@ -148,7 +148,7 @@ class MultiLayerPeepholeLSTM(nn.Module):
         ## Peephole LSTM Layers
         self.layers = nn.ModuleList([PeepholeLSTM(input_size=self.input_size, hidden_size=self.hidden_size)])
         for _ in range(1, self.num_layers):
-            self.layers.append(PeepholeLSTM(input_size=self.hidden_size, hidden_size=self.hidden_size))
+            self.layers.append(PeepholeLSTM(input_size=self.input_size, hidden_size=self.hidden_size))
             
         # Fully connected output layer
         self.fc = nn.Linear(in_features = self.hidden_size, 
@@ -159,22 +159,24 @@ class MultiLayerPeepholeLSTM(nn.Module):
         
         
     def forward(self, x, y):
-        
-        x = x.permute(0, 2, 1)
+
+        x = x.permute(0, 2, 1) 
         
         # Initialize hidden and cell states
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(self.config.device)
-        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(self.config.device)
+        h0 = torch.zeros(x.size(0), x.size(1), self.hidden_size).to(self.config.device)
+        c0 = torch.zeros(x.size(0), x.size(1), self.hidden_size).to(self.config.device)
         
         # Forward pass through Peephole LSTM layers
         for layer in self.layers:
             h0, c0 = layer(x, prev_hidden_state = h0, prev_cell_state = c0)
         
         # output
-        out = self.fc(h0)        # output from the last time step
+        out = self.fc(h0[:, -1, :])        # output from the last time step
         
         if y is None:
             return out
+        
+        loss = self.loss_fn(out, y)
         
         return out, loss
 

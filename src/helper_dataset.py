@@ -3,7 +3,6 @@ import random
 import pandas as pd
 import numpy as np
 import pickle
-from pyts.image import GramianAngularField
 from tqdm import tqdm
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
@@ -162,9 +161,7 @@ class MyDataset(Dataset):
         
         # Experiment configuration
         use_commodity_prices = self.exp_config['use_commodity_prices']
-        hybrid_model         = self.exp_config['hybrid_model']
-        model_type           = self.exp_config['model_type'][0]
-        garch_models         = self.exp_config['model_type'][1:] if hybrid_model else ''
+        hybrid_config        = self.exp_config['model_type']
         window               = self.exp_config['window']
         step_size            = self.config.step_size
         n_forward            = 1
@@ -181,9 +178,9 @@ class MyDataset(Dataset):
             features += ['log_returns_oil', 'log_returns_gold']
             
         # Append garch model features
-        if 'garch' in garch_models: features.append('garch_volatility')
-        if 'egarch' in garch_models: features.append('egarch_volatility')
-        if 'gjr_garch' in garch_models: features.append('gjr_garch_volatility')
+        if 'garch'      in hybrid_config: features.append('garch_volatility')
+        if 'egarch'     in hybrid_config: features.append('egarch_volatility')
+        if 'gjr_garch'  in hybrid_config: features.append('gjr_garch_volatility')
             
         ## sort by date
         self.df.sort_values(by = 'Date', ascending = False)
@@ -197,6 +194,7 @@ class MyDataset(Dataset):
                     'inputs'  : self.df[features][i:i+window].values,
                     'target'  : self.df[target].values[i + window],
                     })
+                
         return data
     
     def __len__(self):
@@ -211,7 +209,16 @@ class MyDataset(Dataset):
         target = torch.tensor(sample['target'], dtype=torch.float32)
         
         return (date, inputs, target)
+
+def prepare_dataset(config, window, mkt_index):
     
+    filepath = os.path.join(config.data_dir, 'prep_data', f'window_{window}', mkt_index, 'final_data.csv')
+    if not os.path.exists(filepath):
+        # prepare
+        df = pd.read_csv(f'{config.data_dir}/data/{mkt_index}.csv')
+        p = Preprocess(df, config, asset_index_name=mkt_index)
+        p.estimate_log_returns()
+        _ = p.combine()
     
 def get_dataloaders(config, fold = 1):
     
@@ -219,6 +226,11 @@ def get_dataloaders(config, fold = 1):
     mkt_index = config.experiment_config['index']
     window    = config.experiment_config['window']
     use_commodity_prices = config.experiment_config['use_commodity_prices']
+    
+    ## Prepare dataset
+    prepare_dataset(config, window, mkt_index)
+    prepare_dataset(config, window, 'Gold_Futures')
+    prepare_dataset(config, window, 'Crude_Oil_WTI Futures')
     
     # folds
     folds = config.splits if fold == -1 else config.folds[fold]         # if fold is -1 then we are training on the entire dataset minus test samples
@@ -266,27 +278,3 @@ def get_dataloaders(config, fold = 1):
     print(f'valid samples: {len(valid_loader.dataset)}')
         
     return train, train_loader, valid_loader, None
-        
-        
-if __name__ == '__main__':
-    from helper_config import Config
-    config = Config()
-    config.data_dir = 'inputs'
-    
-    for file in os.listdir('inputs/data'):
-        df = pd.read_csv(f'inputs/data/{file}')
-        p = Preprocess(df, config, asset_index_name=file.replace('.csv', ''))
-        p.estimate_log_returns()
-        final_df = p.combine()
-        #print(final_df.head())
-    
-    # config.experiment_config = dict(
-    #     index                   = 'ATX',
-    #     use_commodity_prices    = False,
-    #     hybrid_model            = False,
-    #     model_type              = ['LSTM'],
-    #     window                  = 14
-    # )
-    
-    # config.fold = 1
-    # _ = get_dataloaders(config, fold = 1)

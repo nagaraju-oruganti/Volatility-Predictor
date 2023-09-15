@@ -59,7 +59,6 @@ class Config:
     experiment_config = dict(
         index                   = 'ATX',
         use_commodity_prices    = False,
-        hybrid_model            = False,
         model_type              = ['LSTM'],
         window                  = 14
     )
@@ -77,7 +76,6 @@ class Config:
     save_checkpoint = False
     
     # model inputs / configuration
-    input_size = experiment_config['window']
     hidden_size = 64
     num_layers = 3
     output_size = 1

@@ -56,3 +56,4 @@ notebooks/playground.ipynb
 inputs/data/*.pkl
 docs
 inputs/prep_data
+models

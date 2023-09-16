@@ -86,8 +86,8 @@ def prepare_configuration(specs):
     
     config.model_name = specs['model_name']
     config.learning_rate = 1e-5
-    config.train_batch_size = 8
-    config.num_epochs = 1
+    config.train_batch_size = 16
+    config.num_epochs = 200
     config.early_stop_count = 10
     config.save_checkpoint = True
     

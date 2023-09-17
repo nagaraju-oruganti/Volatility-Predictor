@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import pickle
 from tqdm import tqdm
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from tqdm import tqdm
 
 import torch
@@ -57,7 +57,7 @@ class Preprocess:
         variance = np.array([(r - avg)**2 for r in log_returns])
         
         # realized volatility
-        rv = np.sqrt(np.mean(variance))
+        rv = 100 * np.sqrt(np.mean(variance))
 
         return rv
     
@@ -92,6 +92,7 @@ class Preprocess:
             
         # log returns of a stock / index
         log_rtn_df = __make_dataset(self.log_returns, name = 'log_returns')
+        log_rtn_df['log_returns'] = 100 * (log_rtn_df['log_returns']) ** 2
         
         # realized volatlity        (target)
         rv_list = self.estimate_realized_volatility()
@@ -127,11 +128,11 @@ class Preprocess:
     
     def normalize(self, df):
         
-        scaler = StandardScaler()
+        scaler = StandardScaler()   #MinMaxScaler(feature_range=(-1, 1))
         features = [c for c in df.columns if c not in ['index', 'realized_volatility']]
         df[features] = scaler.fit_transform(df[features])
         
-        tgt_scaler = StandardScaler()
+        tgt_scaler = StandardScaler()   #MinMaxScaler(feature_range=(-1, 1))
         df['realized_volatility'] = tgt_scaler.fit_transform(df['realized_volatility'].values.reshape(-1,1))
         
         # save
@@ -167,7 +168,7 @@ class MyDataset(Dataset):
         n_forward            = 1
         
         # list of features
-        features = ['log_returns']
+        features = ['log_returns', 'realized_volatility']
         
         # target
         target = 'realized_volatility'
@@ -181,7 +182,7 @@ class MyDataset(Dataset):
         if 'garch'      in hybrid_config: features.append('garch_volatility')
         if 'egarch'     in hybrid_config: features.append('egarch_volatility')
         if 'gjr_garch'  in hybrid_config: features.append('gjr_garch_volatility')
-            
+        
         ## sort by date
         self.df.sort_values(by = 'Date', ascending = False)
         

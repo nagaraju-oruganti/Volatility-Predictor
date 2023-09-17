@@ -90,6 +90,7 @@ def prepare_configuration(specs):
     config.num_epochs = 200
     config.early_stop_count = 10
     config.save_checkpoint = True
+    config.num_layers = 4
     
     config.experiment_config['model_type'] = specs['model_type']
     config.experiment_config['use_commodity_prices'] = specs['use_commodity_prices']

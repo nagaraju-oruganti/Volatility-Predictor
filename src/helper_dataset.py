@@ -41,8 +41,6 @@ class Preprocess:
         self.df.sort_values(by = 'Date', ascending = True, inplace = True)
         self.df.reset_index(inplace = True, drop = True)        # drop index for tracking
         
-        #self.df = self.df.head(60)
-        
         # estimate log-returns and mu
         self.log_returns = np.log(self.df['Price'] / self.df['Price'].shift(1)).dropna()
         
@@ -54,10 +52,10 @@ class Preprocess:
         avg= np.mean(log_returns)
         
         # variance
-        variance = np.array([(r - avg)**2 for r in log_returns])
+        variance = np.array([r**2 for r in log_returns])        # 100 x mean(log_rtn - mean(log_rn))^2
         
         # realized volatility
-        rv = 100 * np.sqrt(np.mean(variance))
+        rv = np.sqrt(np.mean(variance) * 252)       # annualized
 
         return rv
     
@@ -66,9 +64,9 @@ class Preprocess:
         step_size   = self.config.step_size
         rv_list     = []
         for i in range(len(self.log_returns), -1, -step_size):
-            sub_seq = self.log_returns[i-window : i].values.tolist()
+            sub_seq = self.log_returns[i: i + window].values.tolist()
             if len(sub_seq) == window: 
-                rv_list.append([i, self.calculate_rv(sub_seq)])      
+                rv_list.append([i, self.calculate_rv(sub_seq)])  
         
         return rv_list
         
@@ -92,7 +90,7 @@ class Preprocess:
             
         # log returns of a stock / index
         log_rtn_df = __make_dataset(self.log_returns, name = 'log_returns')
-        log_rtn_df['log_returns'] = 100 * (log_rtn_df['log_returns']) ** 2
+        log_rtn_df['log_returns'] = (log_rtn_df['log_returns']) ** 2              # 100 x log_rtn^2
         
         # realized volatlity        (target)
         rv_list = self.estimate_realized_volatility()
@@ -184,7 +182,7 @@ class MyDataset(Dataset):
         if 'gjr_garch'  in hybrid_config: features.append('gjr_garch_volatility')
         
         ## sort by date
-        self.df.sort_values(by = 'Date', ascending = False)
+        self.df.sort_values(by = 'Date', ascending = False, inplace = True)
         
         data = []
         for i in range(len(self.df)-window-n_forward, -1, -step_size):

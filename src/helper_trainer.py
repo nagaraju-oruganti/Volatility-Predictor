@@ -44,10 +44,10 @@ def evaluate(model, dataloader, device):
     y_trues = np.array(y_trues)
     y_preds = np.array(y_preds)
     
+    eval_results = [dates, y_trues, y_preds]
+    
     loss = np.mean(batch_loss_list)
     mse = mean_squared_error(y_trues, y_preds)
-    
-    eval_results = [dates, y_trues, y_preds]
     
     return mse, loss, eval_results
 

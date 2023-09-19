@@ -85,13 +85,14 @@ def prepare_configuration(specs):
     config.models_dir = specs.get('models_dir', '../models')
     
     config.model_name = specs['model_name']
-    config.learning_rate = 1e-5
-    config.train_batch_size = 16
+    config.learning_rate = 1e-4
+    config.train_batch_size = 8
     config.num_epochs = 200
     config.early_stop_count = 10
     config.save_checkpoint = True
     config.num_layers = 4
     
+    config.experiment_config['index'] = specs['index']
     config.experiment_config['model_type'] = specs['model_type']
     config.experiment_config['use_commodity_prices'] = specs['use_commodity_prices']
     config.experiment_config['window'] = specs['window']

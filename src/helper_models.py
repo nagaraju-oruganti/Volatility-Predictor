@@ -75,7 +75,7 @@ class LSTMModel(nn.Module):
                             out_features= self.output_size)
         
         # loss
-        self.loss_fn = nn.MSELoss()
+        self.loss_fn = nn.SmoothL1Loss()
         
     def forward(self, x, y = None):
         
@@ -86,10 +86,10 @@ class LSTMModel(nn.Module):
         c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(self.config.device)
         
         # Forward pass through LSTM layers
-        out, _ = self.lstm(x, (h0, c0))
+        h0, _ = self.lstm(x, (h0, c0))
         
         # output
-        out = self.fc(out[:, -1, :])        # output from the last time step
+        out = self.fc(torch.mean(h0, dim=1))        # output from the last time step
         loss = self.loss_fn(out, y)
         if y is None:
             return out

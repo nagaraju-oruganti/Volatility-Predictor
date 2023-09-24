@@ -104,8 +104,7 @@ def trainer(config, train, model, train_loader, valid_loader, optimizer, schedul
         scheduler.step(eval_metric)           # apply scheduler on validation accuracy
         
         ### Save checkpoint
-        if ((epoch + 1) > config.save_epoch_wait):
-            save_checkpoint(model, epoch, eval_results, best = eval_metric < ref_score)
+        save_checkpoint(model, epoch, eval_results, best = eval_metric < ref_score)
         
         # Tracking early stop
         counter = 0 if eval_metric <= ref_score else counter + 1

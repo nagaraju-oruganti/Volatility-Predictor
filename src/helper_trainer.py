@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from torch.cuda import amp              # mixed precision
 from torch import autocast
 from torchsummary import summary
+from torch.nn.utils import clip_grad_norm_
 from datetime import datetime
 
 from sklearn.metrics import mean_squared_error
@@ -156,7 +157,9 @@ def trainer(config, train, model, train_loader, valid_loader, optimizer, schedul
             scaler.scale(loss).backward()           # scale loss
             
             if (i + 1) % iters_to_accumlate == 0:
-                scaler.step(optimizer)                  # step
+                scaler.unscale_(optimizer)                                      # Unscales the gradients
+                clip_grad_norm_(model.parameters(), max_norm = 1)   # Clip gradients
+                scaler.step(optimizer)                                          # step
                 scaler.update()
                 optimizer.zero_grad()
             #######

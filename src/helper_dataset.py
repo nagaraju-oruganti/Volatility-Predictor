@@ -166,7 +166,7 @@ class MyDataset(Dataset):
         n_forward            = 1
         
         # list of features
-        features = ['log_returns', 'realized_volatility']
+        features = ['log_returns']
         
         # target
         target = 'realized_volatility'
